@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic-Tac-Toe</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #1e1e2e;
+    color: #eee;
+  }
+  h1 { margin: 0 0 10px; }
+  #status { font-size: 1.3rem; margin-bottom: 16px; min-height: 1.6em; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    grid-template-rows: repeat(3, 100px);
+    gap: 8px;
+  }
+  .cell {
+    background: #2e2e42;
+    border: none;
+    border-radius: 10px;
+    font-size: 3rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: #eee;
+    transition: background 0.15s;
+  }
+  .cell:hover:not(:disabled) { background: #3c3c55; }
+  .cell:disabled { cursor: default; }
+  .cell.X { color: #4fc3f7; }
+  .cell.O { color: #ff8a65; }
+  .cell.win { background: #4caf50; color: #fff; }
+  .controls { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
+  button.ctrl, select {
+    padding: 8px 16px;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: none;
+    background: #5c6bc0;
+    color: #fff;
+    cursor: pointer;
+  }
+  #score { margin-top: 16px; font-size: 1rem; opacity: 0.85; }
+</style>
+</head>
+<body>
+  <h1>Tic-Tac-Toe</h1>
+  <div id="status"></div>
+  <div id="board"></div>
+  <div class="controls">
+    <select id="mode">
+      <option value="pvp">2 Players</option>
+      <option value="cpu">vs Computer</option>
+    </select>
+    <button class="ctrl" id="reset">New Game</button>
+  </div>
+  <div id="score"></div>
+
+<script>
+  const LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const scoreEl = document.getElementById('score');
+  const modeEl = document.getElementById('mode');
+
+  let board, current, gameOver;
+  const score = { X: 0, O: 0, draw: 0 };
+
+  function init() {
+    board = Array(9).fill(null);
+    current = 'X';
+    gameOver = false;
+    render();
+  }
+
+  function winnerOf(b) {
+    for (const line of LINES) {
+      const [a, c, d] = line;
+      if (b[a] && b[a] === b[c] && b[a] === b[d]) return { player: b[a], line };
+    }
+    return b.every(Boolean) ? { player: 'draw' } : null;
+  }
+
+  function play(i) {
+    if (gameOver || board[i]) return;
+    board[i] = current;
+    const result = winnerOf(board);
+    if (result) {
+      gameOver = true;
+      score[result.player]++;
+      render(result);
+      return;
+    }
+    current = current === 'X' ? 'O' : 'X';
+    render();
+    if (modeEl.value === 'cpu' && current === 'O') {
+      setTimeout(() => play(bestMove()), 300);
+    }
+  }
+
+  // Minimax AI (unbeatable)
+  function minimax(b, player) {
+    const r = winnerOf(b);
+    if (r) return r.player === 'O' ? 10 : r.player === 'X' ? -10 : 0;
+    const scores = [];
+    for (let i = 0; i < 9; i++) {
+      if (!b[i]) {
+        b[i] = player;
+        scores.push(minimax(b, player === 'O' ? 'X' : 'O'));
+        b[i] = null;
+      }
+    }
+    return player === 'O' ? Math.max(...scores) : Math.min(...scores);
+  }
+
+  function bestMove() {
+    let best = -Infinity, move = -1;
+    for (let i = 0; i < 9; i++) {
+      if (!board[i]) {
+        board[i] = 'O';
+        const s = minimax(board, 'X');
+        board[i] = null;
+        if (s > best) { best = s; move = i; }
+      }
+    }
+    return move;
+  }
+
+  function render(result) {
+    boardEl.innerHTML = '';
+    board.forEach((val, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'cell' + (val ? ' ' + val : '');
+      btn.textContent = val || '';
+      const cpuTurn = modeEl.value === 'cpu' && current === 'O';
+      btn.disabled = gameOver || !!val || cpuTurn;
+      if (result && result.line && result.line.includes(i)) btn.classList.add('win');
+      btn.addEventListener('click', () => play(i));
+      boardEl.appendChild(btn);
+    });
+
+    if (result) {
+      statusEl.textContent = result.player === 'draw' ? "It's a draw!" : `${result.player} wins!`;
+    } else {
+      statusEl.textContent = `${current}'s turn`;
+    }
+    scoreEl.textContent = `X: ${score.X}   |   O: ${score.O}   |   Draws: ${score.draw}`;
+  }
+
+  document.getElementById('reset').addEventListener('click', init);
+  modeEl.addEventListener('change', () => {
+    score.X = score.O = score.draw = 0;
+    init();
+  });
+
+  init();
+</script>
+</body>
+</html>
