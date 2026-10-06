@@ -37,8 +37,6 @@
   }
   .cell:hover:not(:disabled) { background: #26553a; }
   .cell:disabled { cursor: default; }
-  .cell.X { color: #a5d6a7; }
-  .cell.O { color: #ffe082; }
   .cell.win { background: #fbc02d; color: #0f2418; }
   .controls { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
   button.ctrl, select {
@@ -51,11 +49,18 @@
     cursor: pointer;
   }
   button.ctrl:disabled { opacity: 0.5; cursor: default; }
+  .pickers { display: flex; gap: 16px; margin-bottom: 16px; align-items: center; }
+  .pickers label { display: flex; gap: 6px; align-items: center; }
+  .pickers select { font-size: 1.4rem; padding: 4px 8px; }
   #score { margin-top: 16px; font-size: 1rem; opacity: 0.85; }
 </style>
 </head>
 <body>
   <h1>Tic-Tac-Toe</h1>
+  <div class="pickers">
+    <label>Player 1 <select id="emojiX"></select></label>
+    <label>Player 2 <select id="emojiO"></select></label>
+  </div>
   <div id="status"></div>
   <div id="board"></div>
   <div class="controls">
@@ -86,6 +91,22 @@
   const modeEl = document.getElementById('mode');
   const difficultyEl = document.getElementById('difficulty');
   const resignEl = document.getElementById('resign');
+
+  // Internally the players stay 'X' and 'O'; these pickers choose the emoji shown for each
+  const EMOJIS = ['❌','⭕','🐶','🐱','🦊','🐸','🐼','🦄','🍕','🍩','🔥','⚽','🚀','👻','⭐','🤖'];
+  const pickerEls = { X: document.getElementById('emojiX'), O: document.getElementById('emojiO') };
+  const symbol = p => pickerEls[p].value;
+
+  for (const [p, def] of [['X', '❌'], ['O', '⭕']]) {
+    for (const e of EMOJIS) pickerEls[p].add(new Option(e, e, false, e === def));
+  }
+
+  // Grey out each player's emoji in the other's picker so both can't pick the same one
+  function syncPickers() {
+    for (const [p, q] of [['X', 'O'], ['O', 'X']]) {
+      for (const opt of pickerEls[p].options) opt.disabled = opt.value === symbol(q);
+    }
+  }
 
   let board, current, gameOver, cpuTimer;
   const score = { X: 0, O: 0, draw: 0 };
@@ -189,12 +210,14 @@
     return randomMove();
   }
 
+  let lastResult;
   function render(result) {
+    lastResult = result;
     boardEl.innerHTML = '';
     board.forEach((val, i) => {
       const btn = document.createElement('button');
-      btn.className = 'cell' + (val ? ' ' + val : '');
-      btn.textContent = val || '';
+      btn.className = 'cell';
+      btn.textContent = val ? symbol(val) : '';
       const cpuTurn = modeEl.value === 'cpu' && current === 'O';
       btn.disabled = gameOver || !!val || cpuTurn;
       if (result && result.line && result.line.includes(i)) btn.classList.add('win');
@@ -205,13 +228,13 @@
     resignEl.disabled = gameOver || (modeEl.value === 'cpu' && current === 'O');
 
     if (result && result.resigned) {
-      statusEl.textContent = `${result.resigned} resigned. ${result.player} wins!`;
+      statusEl.textContent = `${symbol(result.resigned)} resigned. ${symbol(result.player)} wins!`;
     } else if (result) {
-      statusEl.textContent = result.player === 'draw' ? "It's a draw!" : `${result.player} wins!`;
+      statusEl.textContent = result.player === 'draw' ? "It's a draw!" : `${symbol(result.player)} wins!`;
     } else {
-      statusEl.textContent = `${current}'s turn`;
+      statusEl.textContent = `${symbol(current)}'s turn`;
     }
-    scoreEl.textContent = `X: ${score.X}   |   O: ${score.O}   |   Draws: ${score.draw}`;
+    scoreEl.textContent = `${symbol('X')}: ${score.X}   |   ${symbol('O')}: ${score.O}   |   Draws: ${score.draw}`;
   }
 
   function resetScore() {
@@ -227,6 +250,10 @@
   });
   difficultyEl.addEventListener('change', resetScore);
   difficultyEl.hidden = modeEl.value !== 'cpu';
+  for (const el of Object.values(pickerEls)) {
+    el.addEventListener('change', () => { syncPickers(); render(lastResult); });
+  }
+  syncPickers();
 
   init();
 </script>
