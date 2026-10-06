@@ -50,6 +50,7 @@
     color: #fff;
     cursor: pointer;
   }
+  button.ctrl:disabled { opacity: 0.5; cursor: default; }
   #score { margin-top: 16px; font-size: 1rem; opacity: 0.85; }
 </style>
 </head>
@@ -62,6 +63,7 @@
       <option value="pvp">2 Players</option>
       <option value="cpu">vs Computer</option>
     </select>
+    <button class="ctrl" id="resign">Resign</button>
     <button class="ctrl" id="reset">New Game</button>
   </div>
   <div id="score"></div>
@@ -77,6 +79,7 @@
   const statusEl = document.getElementById('status');
   const scoreEl = document.getElementById('score');
   const modeEl = document.getElementById('mode');
+  const resignEl = document.getElementById('resign');
 
   let board, current, gameOver;
   const score = { X: 0, O: 0, draw: 0 };
@@ -111,6 +114,15 @@
     if (modeEl.value === 'cpu' && current === 'O') {
       setTimeout(() => play(bestMove()), 300);
     }
+  }
+
+  // The player whose turn it is concedes; the opponent wins
+  function resign() {
+    if (gameOver) return;
+    gameOver = true;
+    const winner = current === 'X' ? 'O' : 'X';
+    score[winner]++;
+    render({ player: winner, resigned: current });
   }
 
   // Minimax AI (unbeatable)
@@ -154,7 +166,11 @@
       boardEl.appendChild(btn);
     });
 
-    if (result) {
+    resignEl.disabled = gameOver || (modeEl.value === 'cpu' && current === 'O');
+
+    if (result && result.resigned) {
+      statusEl.textContent = `${result.resigned} resigned. ${result.player} wins!`;
+    } else if (result) {
       statusEl.textContent = result.player === 'draw' ? "It's a draw!" : `${result.player} wins!`;
     } else {
       statusEl.textContent = `${current}'s turn`;
@@ -163,6 +179,7 @@
   }
 
   document.getElementById('reset').addEventListener('click', init);
+  resignEl.addEventListener('click', resign);
   modeEl.addEventListener('change', () => {
     score.X = score.O = score.draw = 0;
     init();
