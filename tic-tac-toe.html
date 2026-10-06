@@ -62,6 +62,11 @@
       <option value="pvp">2 Players</option>
       <option value="cpu">vs Computer</option>
     </select>
+    <select id="difficulty" hidden>
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard" selected>Hard</option>
+    </select>
     <button class="ctrl" id="reset">New Game</button>
   </div>
   <div id="score"></div>
@@ -77,6 +82,7 @@
   const statusEl = document.getElementById('status');
   const scoreEl = document.getElementById('score');
   const modeEl = document.getElementById('mode');
+  const difficultyEl = document.getElementById('difficulty');
 
   let board, current, gameOver;
   const score = { X: 0, O: 0, draw: 0 };
@@ -109,7 +115,7 @@
     current = current === 'X' ? 'O' : 'X';
     render();
     if (modeEl.value === 'cpu' && current === 'O') {
-      setTimeout(() => play(bestMove()), 300);
+      setTimeout(() => play(cpuMove()), 300);
     }
   }
 
@@ -141,6 +147,35 @@
     return move;
   }
 
+  function randomMove() {
+    const empty = board.map((v, i) => v ? null : i).filter(i => i !== null);
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+
+  // Square that completes a line for player, or -1
+  function finishingMove(player) {
+    for (const [a, b, c] of LINES) {
+      const vals = [board[a], board[b], board[c]];
+      if (vals.filter(v => v === player).length === 2 && vals.includes(null)) {
+        return [a, b, c][vals.indexOf(null)];
+      }
+    }
+    return -1;
+  }
+
+  // Easy: random. Medium: win or block if possible, else random. Hard: minimax.
+  function cpuMove() {
+    const level = difficultyEl.value;
+    if (level === 'hard') return bestMove();
+    if (level === 'medium') {
+      const win = finishingMove('O');
+      if (win >= 0) return win;
+      const block = finishingMove('X');
+      if (block >= 0) return block;
+    }
+    return randomMove();
+  }
+
   function render(result) {
     boardEl.innerHTML = '';
     board.forEach((val, i) => {
@@ -163,10 +198,16 @@
   }
 
   document.getElementById('reset').addEventListener('click', init);
-  modeEl.addEventListener('change', () => {
+  function resetScore() {
     score.X = score.O = score.draw = 0;
     init();
+  }
+  modeEl.addEventListener('change', () => {
+    difficultyEl.hidden = modeEl.value !== 'cpu';
+    resetScore();
   });
+  difficultyEl.addEventListener('change', resetScore);
+  difficultyEl.hidden = modeEl.value !== 'cpu';
 
   init();
 </script>
