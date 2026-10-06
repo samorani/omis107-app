@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect 4</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #0f2418;
+    color: #e8f5e9;
+  }
+  h1 { margin: 0 0 10px; }
+  #status { font-size: 1.3rem; margin-bottom: 16px; min-height: 1.6em; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(7, 60px);
+    grid-template-rows: repeat(6, 60px);
+    gap: 8px;
+    padding: 10px;
+    background: #1b3d2a;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .cell {
+    position: relative;
+    border-radius: 50%;
+    background: #0f2418;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .cell.hover { background: #26553a; }
+  #board.locked .cell { cursor: default; }
+  .disc {
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+  }
+  .disc.R { background: #e53935; }
+  .disc.Y { background: #ffe082; }
+  .disc.drop { animation: drop 0.35s ease-in; }
+  @keyframes drop {
+    from { transform: translateY(var(--drop)); }
+    to   { transform: translateY(0); }
+  }
+  .disc.win { box-shadow: 0 0 0 4px #fbc02d, 0 0 14px 4px #fbc02d; }
+  .controls { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
+  button.ctrl, select {
+    padding: 8px 16px;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: none;
+    background: #2e7d32;
+    color: #fff;
+    cursor: pointer;
+  }
+  #score { margin-top: 16px; font-size: 1rem; opacity: 0.85; }
+  @media (max-width: 520px) {
+    #board { grid-template-columns: repeat(7, 40px); grid-template-rows: repeat(6, 40px); gap: 5px; }
+  }
+</style>
+</head>
+<body>
+  <h1>Connect 4</h1>
+  <div id="status"></div>
+  <div id="board"></div>
+  <div class="controls">
+    <select id="mode">
+      <option value="pvp">2 Players</option>
+      <option value="cpu">vs Computer</option>
+    </select>
+    <button class="ctrl" id="reset">New Game</button>
+  </div>
+  <div id="score"></div>
+
+<script>
+  const ROWS = 6, COLS = 7;
+  const NAMES = { R: 'Red', Y: 'Yellow' };
+  const DIRS = [[0,1],[1,0],[1,1],[1,-1]];
+  const ORDER = [3,2,4,1,5,0,6]; // center-first search order
+  const AI_DEPTH = 6;
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const scoreEl = document.getElementById('score');
+  const modeEl = document.getElementById('mode');
+
+  let board, current, gameOver, lastMove;
+  const score = { R: 0, Y: 0, draw: 0 };
+
+  const other = p => p === 'R' ? 'Y' : 'R';
+  const cpuTurn = () => modeEl.value === 'cpu' && current === 'Y';
+
+  function init() {
+    board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    current = 'R';
+    gameOver = false;
+    lastMove = null;
+    render();
+  }
+
+  // Lowest empty row in column c, or -1 if full
+  function dropRow(b, c) {
+    for (let r = ROWS - 1; r >= 0; r--) if (!b[r][c]) return r;
+    return -1;
+  }
+
+  // Cells forming a 4+ line through (r, c), or null
+  function winLine(b, r, c) {
+    const p = b[r][c];
+    for (const [dr, dc] of DIRS) {
+      const cells = [[r, c]];
+      for (const s of [1, -1]) {
+        let rr = r + dr * s, cc = c + dc * s;
+        while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && b[rr][cc] === p) {
+          cells.push([rr, cc]);
+          rr += dr * s; cc += dc * s;
+        }
+      }
+      if (cells.length >= 4) return cells;
+    }
+    return null;
+  }
+
+  const isFull = b => b[0].every(Boolean);
+
+  function play(c) {
+    if (gameOver) return;
+    const r = dropRow(board, c);
+    if (r < 0) return;
+    board[r][c] = current;
+    lastMove = [r, c];
+    const line = winLine(board, r, c);
+    if (line) {
+      gameOver = true;
+      score[current]++;
+      render({ player: current, line });
+      return;
+    }
+    if (isFull(board)) {
+      gameOver = true;
+      score.draw++;
+      render({ player: 'draw' });
+      return;
+    }
+    current = other(current);
+    render();
+    if (cpuTurn()) setTimeout(() => play(bestMove()), 400);
+  }
+
+  // Heuristic AI: negamax with alpha-beta pruning
+  function scoreWindow(w, p) {
+    const o = other(p);
+    const mine = w.filter(x => x === p).length;
+    const theirs = w.filter(x => x === o).length;
+    const empty = 4 - mine - theirs;
+    if (mine === 3 && empty === 1) return 5;
+    if (mine === 2 && empty === 2) return 2;
+    if (theirs === 3 && empty === 1) return -4;
+    return 0;
+  }
+
+  function evaluate(b, p) {
+    let s = 0;
+    for (let r = 0; r < ROWS; r++) if (b[r][3] === p) s += 3;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        for (const [dr, dc] of DIRS) {
+          const er = r + dr * 3, ec = c + dc * 3;
+          if (er < 0 || er >= ROWS || ec < 0 || ec >= COLS) continue;
+          const w = [0,1,2,3].map(i => b[r + dr * i][c + dc * i]);
+          s += scoreWindow(w, p);
+        }
+      }
+    }
+    return s;
+  }
+
+  function negamax(b, depth, alpha, beta, p) {
+    let best = -Infinity;
+    for (const c of ORDER) {
+      const r = dropRow(b, c);
+      if (r < 0) continue;
+      b[r][c] = p;
+      let val;
+      if (winLine(b, r, c)) val = 10000 + depth;
+      else if (depth === 0) val = evaluate(b, p) - evaluate(b, other(p));
+      else val = -negamax(b, depth - 1, -beta, -alpha, other(p));
+      b[r][c] = null;
+      if (val > best) best = val;
+      if (val > alpha) alpha = val;
+      if (alpha >= beta) break;
+    }
+    return best === -Infinity ? 0 : best; // board full -> draw
+  }
+
+  function bestMove() {
+    let best = -Infinity, move = ORDER.find(c => dropRow(board, c) >= 0);
+    for (const c of ORDER) {
+      const r = dropRow(board, c);
+      if (r < 0) continue;
+      board[r][c] = 'Y';
+      const s = winLine(board, r, c) ? Infinity : -negamax(board, AI_DEPTH - 1, -Infinity, -best, 'R');
+      board[r][c] = null;
+      if (s > best) { best = s; move = c; }
+    }
+    return move;
+  }
+
+  function setHover(c, on) {
+    boardEl.querySelectorAll(`.cell[data-col="${c}"]`).forEach(el => el.classList.toggle('hover', on));
+  }
+
+  function render(result) {
+    const locked = gameOver || cpuTurn();
+    boardEl.classList.toggle('locked', locked);
+    boardEl.innerHTML = '';
+    const winSet = new Set((result && result.line || []).map(([r, c]) => r + ',' + c));
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.col = c;
+        const val = board[r][c];
+        if (val) {
+          const disc = document.createElement('div');
+          disc.className = 'disc ' + val;
+          if (lastMove && lastMove[0] === r && lastMove[1] === c) {
+            disc.classList.add('drop');
+            disc.style.setProperty('--drop', `${-(r + 1) * 130}%`);
+          }
+          if (winSet.has(r + ',' + c)) disc.classList.add('win');
+          cell.appendChild(disc);
+        }
+        if (!locked) {
+          cell.addEventListener('click', () => play(c));
+          cell.addEventListener('mouseenter', () => setHover(c, true));
+          cell.addEventListener('mouseleave', () => setHover(c, false));
+        }
+        boardEl.appendChild(cell);
+      }
+    }
+
+    if (result) {
+      statusEl.textContent = result.player === 'draw' ? "It's a draw!" : `${NAMES[result.player]} wins!`;
+    } else {
+      statusEl.textContent = cpuTurn() ? 'Computer is thinking…' : `${NAMES[current]}'s turn`;
+    }
+    scoreEl.textContent = `Red: ${score.R}   |   Yellow: ${score.Y}   |   Draws: ${score.draw}`;
+  }
+
+  document.getElementById('reset').addEventListener('click', init);
+  modeEl.addEventListener('change', () => {
+    score.R = score.Y = score.draw = 0;
+    init();
+  });
+
+  init();
+</script>
+</body>
+</html>
